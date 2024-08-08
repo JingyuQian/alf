@@ -889,7 +889,7 @@ class Algorithm(AlgorithmInterface):
         return r
 
     @common.add_method(nn.Module)
-    def state_dict(self, destination=None, prefix='', visited=None):
+    def state_dict(self, destination=None, prefix='', visited=None, **kwargs):
         """Get state dictionary recursively, including both model state
         and optimizers' state (if any). It can handle a number of special cases:
 
@@ -903,6 +903,9 @@ class Algorithm(AlgorithmInterface):
                 (modules, params, algorithms etc) as the key used in the
                 state dictionary.
             visited (set): a set keeping track of the visited objects.
+            kwargs: additional keyword arguments for backward compatibility (
+                e.g., 'keep_vars' for torch<0.4). They are not used in newer
+                pytorch versions.
 
         Returns:
             OrderedDict: the dictionary including both model state and optimizers'
