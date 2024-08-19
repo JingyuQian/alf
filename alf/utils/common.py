@@ -662,8 +662,8 @@ def get_conf_file(root_dir=None):
     """Get the configuration file.
 
     If ``FLAGS.conf`` is not set, find alf_config.py or configured.gin under
-    ``root_dir`` and returns it. If root_dir is None, use ``FLAGS.root_dir``
-    as ``root_dir``. If there is no 'root_dir' flag defined, return None.
+    ``FLAGS.root_dir`` and returns it. If there is no 'conf' flag defined,
+    return None.
 
     Args:
         root_dir (str): when None, FLAGS.root_dir is used to find the conf file.
@@ -671,6 +671,10 @@ def get_conf_file(root_dir=None):
     Returns:
         str: the name of the conf file. None if there is no conf file
     """
+    if not hasattr(flags.FLAGS, "conf") and not hasattr(
+            flags.FLAGS, "gin_file"):
+        return None
+
     conf_file = getattr(flags.FLAGS, 'conf', None)
     if conf_file is not None:
         return conf_file
@@ -679,8 +683,6 @@ def get_conf_file(root_dir=None):
         return conf_file
 
     if root_dir is None:
-        if not hasattr(flags.FLAGS, 'root_dir'):
-            return None
         root_dir = os.path.expanduser(flags.FLAGS.root_dir)
     conf_file = os.path.join(root_dir, ALF_CONFIG_FILE)
     if os.path.exists(conf_file):
@@ -1064,12 +1066,12 @@ def set_random_seed(seed):
     if seed is None:
         seed = abs(hash(str(os.getpid()) + '|' + str(time.time())))
     else:
-        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.deterministic = False
         torch.backends.cudnn.benchmark = False
         force_torch_deterministic = getattr(flags.FLAGS,
                                             'force_torch_deterministic', True)
         # causes RuntimeError: scatter_add_cuda_kernel does not have a deterministic implementation
-        torch.use_deterministic_algorithms(force_torch_deterministic)
+        torch.use_deterministic_algorithms(False)
     seed %= 2**32
     random.seed(seed)
     # sometime the seed passed in can be very big, but np.random.seed
