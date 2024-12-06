@@ -59,6 +59,7 @@ import sys
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import datetime
 
 from alf.utils import common
 from alf.utils.per_process_context import PerProcessContext
@@ -176,11 +177,12 @@ def training_worker(rank: int,
         _setup_device(rank)
         if world_size > 1:
             # Specialization for distributed mode
-            dist.init_process_group('nccl', rank=rank, world_size=world_size)
+            dist.init_process_group('nccl', rank=rank, world_size=world_size, timeout=datetime.timedelta(hours=10))
             # Recover the flags when spawned as a sub process
-            _define_flags()
-            FLAGS(sys.argv, known_only=True)
-            FLAGS.mark_as_parsed()
+            if rank > 0:
+                _define_flags()
+                FLAGS(sys.argv, known_only=True)
+                FLAGS.mark_as_parsed()
             # Set the rank and total number of processes for distributed training.
             PerProcessContext().set_distributed(
                 rank=rank, local_rank=-1, num_processes=world_size)
@@ -233,7 +235,7 @@ def training_worker_multi_node(local_rank: int,
         _setup_device(local_rank)
         if world_size > 1:
             # Specialization for distributed mode
-            dist.init_process_group('nccl', rank=rank, world_size=world_size)
+            dist.init_process_group('nccl', rank=rank, world_size=world_size, timeout=datetime.timedelta(hours=10))
             # Recover the flags when spawned as a sub process
             # _define_flags()
             FLAGS(sys.argv, known_only=True)
