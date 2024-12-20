@@ -54,7 +54,6 @@ from absl import app
 from absl import flags
 from absl import logging
 import os
-import pathlib
 import sys
 import torch
 import torch.distributed as dist
@@ -82,6 +81,10 @@ def _define_flags():
     flags.DEFINE_enum(
         'distributed', 'none', ['none', 'multi-gpu'],
         'Set whether and how to run training in distributed mode.')
+    flags.DEFINE_bool('as_remote_trainer', False,
+                      'Whether to run in a remote trainer mode.')
+    flags.DEFINE_bool('as_remote_unroller', False,
+                      'Whether to run in a remote unroller mode.')
     flags.mark_flag_as_required('root_dir')
 
 
@@ -116,6 +119,20 @@ def _setup_device(rank: int = 0):
         torch.cuda.set_device(rank)
 
 
+def _setup_remote_configs_if_needed():
+    """Preconfig some configurations for remote training and unrolling.
+    """
+    assert not (FLAGS.as_remote_trainer and FLAGS.as_remote_unroller), (
+        'Cannot specify both --as_remote_trainer and --as_remote_unroller')
+    if FLAGS.as_remote_trainer:
+        alf.pre_config({
+            'TrainerConfig.unroll_length': -1,
+            'TrainerConfig.evaluate': False
+        })
+    elif FLAGS.as_remote_unroller:
+        alf.pre_config({'TrainerConfig.async_eval': False})
+
+
 def _train(root_dir, rank=0, world_size=1):
     """Launch the trainer after the conf file has been parsed. This function
     could be called by grid search after the config has been modified.
@@ -133,12 +150,25 @@ def _train(root_dir, rank=0, world_size=1):
 
     if trainer_conf.ml_type == 'rl':
         ddp_rank = rank if world_size > 1 else -1
-        trainer = policy_trainer.RLTrainer(trainer_conf, ddp_rank)
+        if FLAGS.as_remote_trainer or FLAGS.as_remote_unroller:
+            from alf.algorithms.distributed_off_policy_algorithm import (
+                DistributedTrainer, DistributedUnroller)
+            if FLAGS.as_remote_trainer:
+                alg_wrapper_ctor = DistributedTrainer
+            else:
+                alg_wrapper_ctor = DistributedUnroller
+        else:
+            alg_wrapper_ctor = None
+        trainer = policy_trainer.RLTrainer(trainer_conf, ddp_rank,
+                                           alg_wrapper_ctor)
     elif trainer_conf.ml_type == 'sl':
         # NOTE: SLTrainer does not support distributed training yet
         if world_size > 1:
             raise RuntimeError(
                 "Multi-GPU DDP training does not support supervised learning")
+        if FLAGS.as_remote_trainer or FLAGS.as_remote_unroller:
+            raise RuntimeError(
+                "Remote training does not support supervised learning")
         trainer = policy_trainer.SLTrainer(trainer_conf)
     else:
         raise ValueError("Unsupported ml_type: %s" % trainer_conf.ml_type)
@@ -188,6 +218,9 @@ def training_worker(rank: int,
 
         # Make PerProcessContext read-only.
         PerProcessContext().finalize()
+
+        # Automatically set up some configs for remote unroller and trainer if needed
+        _setup_remote_configs_if_needed()
 
         # Parse the configuration file, which will also implicitly bring up the environments.
         common.parse_conf_file(conf_file)
