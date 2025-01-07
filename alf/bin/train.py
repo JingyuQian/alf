@@ -121,16 +121,27 @@ def _setup_device(rank: int = 0):
 
 def _setup_remote_configs_if_needed():
     """Preconfig some configurations for remote training and unrolling.
+
+    There will also be a global config flag named 'TrainerConfig.remote_training'
+    set in this function, in case the user needs this info in the conf. The flag
+    has one of the three values:
+        - 'trainer' for remote training
+        - 'unroller' for remote unrolling
+        - False for local training
     """
     assert not (FLAGS.as_remote_trainer and FLAGS.as_remote_unroller), (
         'Cannot specify both --as_remote_trainer and --as_remote_unroller')
     if FLAGS.as_remote_trainer:
         alf.pre_config({
             'TrainerConfig.unroll_length': -1,
-            'TrainerConfig.evaluate': False
+            'TrainerConfig.evaluate': False,
+            'TrainerConfig.remote_training': 'trainer'
         })
     elif FLAGS.as_remote_unroller:
-        alf.pre_config({'TrainerConfig.async_eval': False})
+        alf.pre_config({
+            'TrainerConfig.async_eval': False,
+            'TrainerConfig.remote_training': 'unroller'
+        })
 
 
 def _train(root_dir, rank=0, world_size=1):
